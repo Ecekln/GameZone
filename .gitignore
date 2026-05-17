@@ -1,0 +1,12 @@
+## .NET Core ve C# için geçici derleme klasörleri
+bin/
+obj/
+
+## VS Code ayarları ve loglar
+.vscode/
+*.user
+*.suo
+*.userosscache
+
+## Az önce oluşturduğumuz publish (yayın) klasörleri
+publish/
