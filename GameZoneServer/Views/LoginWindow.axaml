@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GameZoneServer.Views.LoginWindow"
+        Title="GameZone - Personel Girişi" 
+        Width="400" Height="450"
+        WindowStartupLocation="CenterScreen"
+        Background="#1e1e1e"
+        RequestedThemeVariant="Dark">
+
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="300" Spacing="15">
+        
+        <TextBlock Text="GAMEZONE" FontSize="28" FontWeight="Bold" Foreground="#00ff88" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+        <TextBlock Text="Yönetim Paneli Girişi" FontSize="14" Foreground="#aaaaaa" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+        <TextBlock Text="Kullanıcı Adı:" Foreground="#ffffff" FontSize="12"/>
+        <TextBox x:Name="TxtUsername" Watermark="Kullanıcı adınızı giriniz..." Background="#2d2d2d" Foreground="#ffffff" BorderBrush="#444444"/>
+
+        <TextBlock Text="Şifre:" Foreground="#ffffff" FontSize="12"/>
+        <TextBox x:Name="TxtPassword" PasswordChar="*" Watermark="Şifrenizi giriniz..." Background="#2d2d2d" Foreground="#ffffff" BorderBrush="#444444"/>
+
+        <Button x:Name="BtnLogin" Content="Sisteme Giriş Yap" 
+                Background="#00ff88" Foreground="#000000" 
+                FontWeight="Bold" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" 
+                Padding="12" Margin="0,15,0,0"/>
+                
+    </StackPanel>
+</Window>
