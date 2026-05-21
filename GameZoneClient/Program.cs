@@ -2,6 +2,9 @@
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using GameZoneClient.Views;
 
 namespace GameZoneClient
 {
@@ -10,48 +13,55 @@ namespace GameZoneClient
         private static string serverIp = "127.0.0.1";
         private static int port = 8888;
         private static string deskName = "Masa-01";
+        public static LockWindow? lockWindow = null!; // Uyarıyı susturan ve dışa açan güncel tanım
 
-        static async Task Main(string[] args)
+        [STAThread]
+        public static void Main(string[] args)
         {
-            Console.WriteLine($"=== GAMEZONE CLIENT ({deskName}) ===");
-            Console.WriteLine("Server'a bağlanılmaya çalışılıyor...");
+            // Arka planda sunucuyla soket bağlantısını canlı tutan motoru başlatıyoruz
+            Task.Run(() => ConnectToServerAsync());
 
+            // Ön planda aşılmaz kilit perdemizi tam ekran açıyoruz
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+
+        public static AppBuilder BuildAvaloniaApp()
+            => AppBuilder.Configure<App>()
+                .UsePlatformDetect()
+                .LogToTrace();
+
+        private static async Task ConnectToServerAsync()
+        {
             try
             {
                 using (TcpClient client = new TcpClient())
                 {
+                    // Sunucu kapılarına dayan
                     await client.ConnectAsync(serverIp, port);
-                    Console.WriteLine("[BAĞLANTI] Server'a başarıyla bağlandı!");
 
                     using (NetworkStream stream = client.GetStream())
                     {
-                        // Server'a kimlik bilgimizi gönderiyoruz
+                        // Ben Masa-01, bağlandım! de
                         string loginMessage = $"GIRIS:{deskName}\n";
                         byte[] data = Encoding.UTF8.GetBytes(loginMessage);
                         await stream.WriteAsync(data, 0, data.Length);
-                        Console.WriteLine($"[SİNYAL] Kimlik gönderildi: {loginMessage.Trim()}");
 
                         byte[] buffer = new byte[1024];
-
-                        // SOMUT ADIM: Server'dan gelecek sinyalleri sürekli dinleyen bir döngü kuruyoruz
                         while (true)
                         {
                             int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                            if (bytesRead == 0) break; // Sunucu bağlantıyı kapattıysa çık
+                            if (bytesRead == 0) break;
 
                             string response = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
 
-                            if (response == "BAĞLANTI_ONAYLANDI")
+                            // SİNYAL GELDİ: Süre bitti kilit emri!
+                            if (response == "SURE_BITTI")
                             {
-                                Console.ForegroundColor = ConsoleColor.Cyan;
-                                Console.WriteLine("[SERVER CEVABI]: BAĞLANTI_ONAYLANDI. Oturum başarıyla açıldı.");
-                                Console.ResetColor();
-                            }
-                            // GERİ SAYIM ALGORİTMASI TETİKLENDİ: Süre bitti sinyali geldi!
-                            else if (response == "SURE_BITTI")
-                            {
-                                LockComputer();
-                                break; // Kilit ekranına geçildi, dinleme döngüsünden çık
+                                // Görsel arayüze (UI Thread) "Ekranı Kilitli Moduna Al" emri gönderiyoruz
+                                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                {
+                                    lockWindow?.UpdateStatus("⚠️ SÜRENİZ BİTTİ! MASA KİLİTLENDİ ⚠️", true);
+                                });
                             }
                         }
                     }
@@ -59,32 +69,28 @@ namespace GameZoneClient
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[HATA] Server'a bağlanılamadı! Detay: {ex.Message}");
-                Console.ReadLine();
+                Console.WriteLine($"[BAĞLANTI HATASI] Sunucuya ulaşılamıyor: {ex.Message}");
             }
         }
+    }
 
-        // ADIM 12: Masayı Kilitleyen ve Girdileri Simüle Olarak Donduran Fonksiyon
-        private static void LockComputer()
+    public class App : Application
+    {
+        public override void Initialize()
         {
-            Console.Clear();
-            while (true)
+            Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+            base.Initialize();
+        }
+
+        public override void OnFrameworkInitializationCompleted()
+        {
+            if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
             {
-                Console.BackgroundColor = ConsoleColor.Red;
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Clear();
-
-                Console.WriteLine("\n\n\n");
-                Console.WriteLine("=========================================================================");
-                Console.WriteLine($"        ⚠️  SÜRENİZ DOLDU! - {deskName.ToUpper()} KİLİTLENMİŞTİR ⚠️        ");
-                Console.WriteLine("=========================================================================");
-                Console.WriteLine("\nLütfen masayı boşaltın veya ana masadan sürenizi uzatın.");
-                Console.WriteLine("Masa şu an kilitli moddadır. Herhangi bir işlem yapılamaz.");
-                Console.WriteLine("\n=========================================================================");
-
-                // Kullanıcının tuşlara basıp kilidi geçmesini engellemek için girdileri yutuyoruz
-                Console.ReadKey(true);
+                // BAŞINA PROGRAM. EKLEYEREK DERLEYİCİYE YOLUNU GÖSTERİYORUZ
+                Program.lockWindow = new LockWindow();
+                desktop.MainWindow = Program.lockWindow;
             }
+            base.OnFrameworkInitializationCompleted();
         }
     }
 }

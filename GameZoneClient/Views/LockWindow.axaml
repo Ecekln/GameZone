@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GameZoneClient.Views.LockWindow"
+        Title="GameZone Client"
+        WindowState="FullScreen" 
+        Topmost="True"
+        Background="#0a0a0a"
+        RequestedThemeVariant="Dark">
+
+    <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+        <Border Background="#111111" 
+                BorderBrush="#ff3333" 
+                BorderThickness="3" 
+                CornerRadius="15" 
+                Padding="40" 
+                Width="500">
+            
+            <StackPanel Spacing="25" HorizontalAlignment="Center">
+                
+                <TextBlock Text="🔒" FontSize="64" HorizontalAlignment="Center"/>
+                <TextBlock Text="GAMEZONE" FontSize="36" FontWeight="Bold" Foreground="#ff3333" HorizontalAlignment="Center"/>
+                
+                <Separator Background="#333333" Height="2"/>
+
+                <TextBlock x:Name="LblDeskName" Text="MASA-01" FontSize="20" FontWeight="SemiBold" Foreground="#ffffff" HorizontalAlignment="Center"/>
+                
+                <TextBlock x:Name="LblStatus" 
+                           Text="BU BİLGİSAYAR KİLİTLİDİR" 
+                           FontSize="16" 
+                           Foreground="#aaaaaa" 
+                           HorizontalAlignment="Center"/>
+
+                <TextBlock Text="Oturum açmak için lütfen resepsiyona müracaat ediniz." 
+                           FontSize="12" 
+                           Foreground="#666666" 
+                           TextWrapping="Wrap" 
+                           HorizontalAlignment="Center" 
+                           TextAlignment="Center"/> 
+                
+                <Border Background="#1a1a1a" Padding="10" CornerRadius="5">
+                    <TextBlock x:Name="LblBalance" Text="💰 Güncel Bakiyeniz: 0.00 TL" FontSize="14" Foreground="#00ff88" HorizontalAlignment="Center"/>
+                </Border>
+
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
