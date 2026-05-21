@@ -47,6 +47,7 @@ namespace GameZoneClient
                         await stream.WriteAsync(data, 0, data.Length);
 
                         byte[] buffer = new byte[1024];
+                        // GameZoneClient/Program.cs içindeki while döngüsünün içini güncelle:
                         while (true)
                         {
                             int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
@@ -54,13 +55,19 @@ namespace GameZoneClient
 
                             string response = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
 
-                            // SİNYAL GELDİ: Süre bitti kilit emri!
-                            if (response == "SURE_BITTI")
+                            if (response == "KILIDI_AC")
                             {
-                                // Görsel arayüze (UI Thread) "Ekranı Kilitli Moduna Al" emri gönderiyoruz
+                                // UI Thread'e sızıp kilit ekranını gizliyoruz! Windows serbest kalıyor!
                                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                                 {
-                                    lockWindow?.UpdateStatus("⚠️ SÜRENİZ BİTTİ! MASA KİLİTLENDİ ⚠️", true);
+                                    Program.lockWindow?.HideWindowForPlayer();
+                                });
+                            }
+                            else if (response == "SURE_BITTI")
+                            {
+                                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                {
+                                    Program.lockWindow?.ShowWindowForPlayer();
                                 });
                             }
                         }

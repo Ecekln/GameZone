@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -13,24 +14,21 @@ namespace GameZoneServer
     {
         private static int port = 8888;
 
-        // .NET ve Avalonia UI için gerekli ana giriş noktası
+        // MÜHENDİSLİK ADIMI: Aktif bağlantıları tutan güvenli havuz (Registry)
+        public static ConcurrentDictionary<string, TcpClient> ActiveClients { get; } = new ConcurrentDictionary<string, TcpClient>();
+
         [STAThread]
         public static void Main(string[] args)
         {
-            // 1. ADIM: Arka planda ağ dinleme (TCP Soket) motorunu ana akışı dondurmadan başlatıyoruz
             Task.Run(() => StartNetworkListenerAsync());
-
-            // 2. ADIM: Ön planda kodla tasarladığımız görsel pencereleri ayağa kaldırıyoruz
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 
-        // Avalonia uygulamasını başlatan ve Fluent (Modern) temayı yükleyen konfigürasyon
         public static AppBuilder BuildAvaloniaApp()
             => AppBuilder.Configure<App>()
                 .UsePlatformDetect()
                 .LogToTrace();
 
-        // Arka plan ağ dinleme motoru
         private static async Task StartNetworkListenerAsync()
         {
             try
@@ -42,7 +40,6 @@ namespace GameZoneServer
                 while (true)
                 {
                     TcpClient client = await server.AcceptTcpClientAsync();
-                    // Her bağlanan masa için yeni bir iş parçacığı (Thread) ayır
                     _ = Task.Run(() => HandleClientAsync(client));
                 }
             }
@@ -54,24 +51,67 @@ namespace GameZoneServer
 
         private static async Task HandleClientAsync(TcpClient client)
         {
-            // İleride burası sağ taraftaki Masalar Grid'ini (DesksGrid) canlı güncellemek için 
-            // arayüz katmanıyla doğrudan konuşacak! Şimdilik soket hattını açık tutuyor.
             NetworkStream stream = client.GetStream();
             byte[] buffer = new byte[1024];
+            string? currentDeskName = null;
+
             try
             {
-                while (await stream.ReadAsync(buffer, 0, buffer.Length) > 0) { /* Mesajları dinle */ }
+                int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                if (bytesRead > 0)
+                {
+                    string message = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
+
+                    if (message.StartsWith("GIRIS:"))
+                    {
+                        currentDeskName = message.Split(':')[1];
+                        Console.WriteLine($"[BAĞLANTI] {currentDeskName} yerel ağdan bağlandı!");
+
+                        // Bağlantıyı havuza ekle (Eğer zaten varsa güncelle)
+                        ActiveClients.AddOrUpdate(currentDeskName, client, (key, oldClient) => client);
+
+                        // Eğer arayüz zaten açıksa anlık olarak yeşile boya
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            if (App.CurrentMainWindow is Views.MainWindow mainWin)
+                            {
+                                mainWin.ActivateDeskOnUI(currentDeskName, client);
+                            }
+                        });
+                    }
+                }
+
+                while (true)
+                {
+                    if (stream.ReadByte() == -1) break;
+                    await Task.Delay(1000);
+                }
             }
-            catch { /* Kopmaları yönet */ }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[KOPMA] {currentDeskName} bağlantısı kesildi: {ex.Message}");
+                if (!string.IsNullOrEmpty(currentDeskName))
+                {
+                    ActiveClients.TryRemove(currentDeskName, out _);
+                    // Arayüz açıksa kartı tekrar griye döndür
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        if (App.CurrentMainWindow is Views.MainWindow mainWin)
+                        {
+                            mainWin.DeactivateDeskOnUI(currentDeskName);
+                        }
+                    });
+                }
+            }
         }
     }
 
-    // Avalonia'nın pencereleri ve Fluent temasını tanıması için gerekli yardımcı uygulama sınıfı
     public class App : Application
     {
+        public static Views.MainWindow? CurrentMainWindow { get; private set; }
+
         public override void Initialize()
         {
-            // Modern koyu temamızı (FluentTheme) kodla yükliyoruz
             Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
             base.Initialize();
         }
@@ -80,10 +120,14 @@ namespace GameZoneServer
         {
             if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
             {
-                // Program İLK AÇILDIĞINDA çalışacak pencereyi LoginWindow (Giriş Ekranı) olarak ekiyoruz!
                 desktop.MainWindow = new LoginWindow();
             }
             base.OnFrameworkInitializationCompleted();
+        }
+
+        public static void SetMainWindow(Views.MainWindow window)
+        {
+            CurrentMainWindow = window;
         }
     }
 }
