@@ -17,6 +17,15 @@
                 
                 <Button x:Name="BtnReports" Content="📊 Hasılat Raporları" Background="Transparent" Foreground="#ffffff" HorizontalAlignment="Stretch" Padding="10"/>
                 <Button x:Name="BtnSettings" Content="⚙️ Sistem Ayarları" Background="Transparent" Foreground="#ffffff" HorizontalAlignment="Stretch" Padding="10"/>
+
+                <Button Name="BtnLogout" 
+                Content="🚪 Çıkış Yap" 
+                Background="#ff3b30" 
+                Foreground="White" 
+                FontWeight="Bold" 
+                Margin="10,20,10,10" 
+                HorizontalAlignment="Stretch" 
+                HorizontalContentAlignment="Center"/>
             </StackPanel>
         </Border>
 
