@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GameZoneClient.Views.TimerWidget"
+        Title="Kalan Süre" 
+        Width="180" Height="60"
+        WindowStartupLocation="Manual"
+        SystemDecorations="None"
+        Topmost="True"
+        Background="Transparent"
+        CornerRadius="10">
+
+    <Border Background="#1a1a1a" BorderBrush="#00ff88" BorderThickness="1.5" CornerRadius="8" Padding="10">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+            <TextBlock Text="⏱️" FontSize="16" VerticalAlignment="Center"/>
+            <TextBlock x:Name="LblTimer" Text="00:00:00" FontSize="16" FontWeight="Bold" Foreground="#00ff88" VerticalAlignment="Center"/>
+        </StackPanel>
+    </Border>
+</Window>

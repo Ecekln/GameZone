@@ -6,10 +6,12 @@ namespace GameZoneClient.Views
     {
         private bool _canClose = false;
 
-        // TEK VE NET YAPICI METOT (CS0111 hatasını çözen kısım)
         public LockWindow()
         {
             InitializeComponent();
+
+            // MÜHENDİSLİK DOKUNUŞU: Tasarımdaki boş etikete gerçek masa adını basıyoruz!
+            LblDeskName.Text = Program.DeskName;
 
             // Oturum açıkken Alt+F4 ile pencerenin kapatılmasını engelleme mekanizması
             this.Closing += (sender, e) =>
@@ -21,16 +23,16 @@ namespace GameZoneClient.Views
         // Ağ motorundan "KİLİDİ_AC" emri geldiğinde tam ekranı gizleyen metot
         public void HideWindowForPlayer()
         {
-            _canClose = true; // Kapanma engelini geçici olarak devre dışı bırak
-            this.Hide();      // Pencereyi arka plana gizle (Masaüstü serbest kalır)
+            _canClose = true;
+            this.Hide();
         }
 
         // Süre bittiğinde ekranı yeniden esir alan metot
         public void ShowWindowForPlayer()
         {
-            _canClose = false; // Kapanma engelini tekrar devreye al
+            _canClose = false;
             this.WindowState = WindowState.FullScreen;
-            this.Show();       // Perdeyi yeniden tam ekran fırlat
+            this.Show();
         }
 
         // Durum mesajlarını canlı güncellemek için

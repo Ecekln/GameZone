@@ -15,7 +15,7 @@ namespace GameZoneServer.Views
         {
             InitializeComponent();
             _userRole = userRole;
-            App.SetMainWindow(this); // Referansı eşitle
+            App.SetMainWindow(this);
 
             BtnDesks.Click += OnDesksButtonClick;
             BtnReports.Click += OnReportsButtonClick;
@@ -34,7 +34,6 @@ namespace GameZoneServer.Views
         {
             LblWelcome.Text = "📊 Hasılat Raporları (SQL Server Verileri)";
             DesksGrid.Children.Clear();
-
             TextBlock txtReport = new TextBlock { Text = "Bugünkü Toplam Kasa Cirosu: 1,500 TL\nAktif Oturum Sayısı: 4", FontSize = 16, Foreground = Brushes.LightGreen, Margin = new Avalonia.Thickness(0, 50, 0, 0) };
             DesksGrid.Children.Add(txtReport);
         }
@@ -43,7 +42,6 @@ namespace GameZoneServer.Views
         {
             LblWelcome.Text = "⚙️ Sistem Ayarları ve Fiyatlandırma";
             DesksGrid.Children.Clear();
-
             TextBlock txtSettings = new TextBlock { Text = "Saatlik Masa Ücreti: 50 TL\nKilit Ekranı Mesajı: SÜRENİZ DOLDU!", FontSize = 16, Foreground = Brushes.White, Margin = new Avalonia.Thickness(0, 50, 0, 0) };
             DesksGrid.Children.Add(txtSettings);
         }
@@ -68,10 +66,8 @@ namespace GameZoneServer.Views
                 TextBlock txtName = new TextBlock { Text = deskName, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center, FontSize = 16, FontWeight = FontWeight.Bold, Foreground = Brushes.White };
                 TextBlock txtStatus = new TextBlock();
 
-                // KRİTİK KONTROL: Bu masa havuzda aktif olarak bekliyor mu?
                 if (Program.ActiveClients.TryGetValue(deskName, out TcpClient? connectedClient))
                 {
-                    // Eğer havuzda varsa direkt YEŞİL başlatıyoruz!
                     deskCard.Background = new SolidColorBrush(Color.Parse("#1a3a2a"));
                     deskCard.BorderBrush = new SolidColorBrush(Color.Parse("#00ff88"));
                     txtStatus.Text = "🟢 Oturum Açık / Süre Sınırsız";
@@ -81,7 +77,6 @@ namespace GameZoneServer.Views
                 }
                 else
                 {
-                    // Havuzda yoksa standart GRİ (Kilitli) başlat
                     deskCard.Background = new SolidColorBrush(Color.Parse("#222222"));
                     deskCard.BorderBrush = new SolidColorBrush(Color.Parse("#444444"));
                     txtStatus.Text = "Masa Kilitli (Süre Yok)";
@@ -98,78 +93,67 @@ namespace GameZoneServer.Views
             }
         }
 
-        // Tıklama olayını bağlayan yardımcı fonksiyon
         private void BindCardClickEvent(Border card, string deskName, TcpClient client)
         {
             card.PointerPressed += async (s, e) =>
             {
                 try
                 {
+                    // Giriş penceresini (Popup) fırlatıyoruz
+                    DurationWindow durationDialog = new DurationWindow(deskName);
+                    await durationDialog.ShowDialog(this);
+
+                    if (durationDialog.SelectedMinutes <= 0)
+                    {
+                        return;
+                    }
                     NetworkStream stream = client.GetStream();
-                    byte[] cmd = Encoding.UTF8.GetBytes("KILIDI_AC\n");
+                    string commandText = $"KILIDI_AC:{durationDialog.SelectedMinutes}\n";
+                    byte[] cmd = Encoding.UTF8.GetBytes(commandText);
+
                     await stream.WriteAsync(cmd, 0, cmd.Length);
-                    LblWelcome.Text = $"⚡ {deskName} bilgisayarına kilit açma emri gönderildi!";
+                    await stream.FlushAsync();
+
+                    // Ekrandaki durumu güncelle
+                    card.Background = new SolidColorBrush(Color.Parse("#1a3a2a"));
+                    card.BorderBrush = new SolidColorBrush(Color.Parse("#00ff88"));
+
+                    foreach (var child in ((StackPanel)card.Child).Children)
+                    {
+                        if (child is TextBlock t && t.Text.Contains("Masa Kilitli"))
+                        {
+                            t.Text = $"🟢 Süre: {durationDialog.SelectedMinutes} Dk";
+                            t.Foreground = Brushes.LightGreen;
+                        }
+                    }
+
+                    LblWelcome.Text = $"⚡ {deskName} bilgisayarına {durationDialog.SelectedMinutes} dakikalık süre tanımlandı!";
+
+                    foreach (var child in ((StackPanel)card.Child).Children)
+                    {
+                        if (child is TextBlock t && t.Text.Contains("Kilitli"))
+                        {
+                            // ARTIK SÜRE SINIRSIZ YAZMASIN:
+                            t.Text = $"🟢 Süre: {durationDialog.SelectedMinutes} Dk";
+                            t.Foreground = Brushes.LightGreen;
+                        }
+                    }
                 }
-                catch { LblWelcome.Text = "❌ Masaya emir gönderilirken ağ hatası oluştu!"; }
+                catch
+                {
+                    LblWelcome.Text = "❌ Masaya emir gönderilirken ağ hatası oluştu!";
+                }
             };
         }
 
-        // Sonradan bağlanan masalar için canlı aktivasyon
         public void ActivateDeskOnUI(string deskName, TcpClient client)
         {
-            foreach (var child in DesksGrid.Children)
-            {
-                if (child is Border card && card.Child is StackPanel content)
-                {
-                    foreach (var subChild in content.Children)
-                    {
-                        if (subChild is TextBlock txt && txt.Text == deskName)
-                        {
-                            card.Background = new SolidColorBrush(Color.Parse("#1a3a2a"));
-                            card.BorderBrush = new SolidColorBrush(Color.Parse("#00ff88"));
-
-                            foreach (var statusTxt in content.Children)
-                            {
-                                if (statusTxt is TextBlock t && t.Text.Contains("Kilitli"))
-                                {
-                                    t.Text = "🟢 Oturum Açık / Süre Sınırsız";
-                                    t.Foreground = Brushes.LightGreen;
-                                }
-                            }
-
-                            BindCardClickEvent(card, deskName, client);
-                        }
-                    }
-                }
-            }
+            LoadMockDesks(); // Tüm grid yapısını güncel bağlananlara göre yeniden tazele
         }
 
-        // Bağlantısı kopan masayı canlı olarak griye döndürme
         public void DeactivateDeskOnUI(string deskName)
         {
-            foreach (var child in DesksGrid.Children)
-            {
-                if (child is Border card && card.Child is StackPanel content)
-                {
-                    foreach (var subChild in content.Children)
-                    {
-                        if (subChild is TextBlock txt && txt.Text == deskName)
-                        {
-                            card.Background = new SolidColorBrush(Color.Parse("#222222"));
-                            card.BorderBrush = new SolidColorBrush(Color.Parse("#444444"));
-
-                            foreach (var statusTxt in content.Children)
-                            {
-                                if (statusTxt is TextBlock t && t.Text.Contains("Oturum"))
-                                {
-                                    t.Text = "Masa Kilitli (Süre Yok)";
-                                    t.Foreground = Brushes.Gray;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            LoadMockDesks(); // Süre bittiğinde veya bağlantı koptuğunda kartı griye döndür
         }
     }
 }

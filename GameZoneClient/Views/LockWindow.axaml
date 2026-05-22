@@ -22,7 +22,7 @@
                 
                 <Separator Background="#333333" Height="2"/>
 
-                <TextBlock x:Name="LblDeskName" Text="MASA-01" FontSize="20" FontWeight="SemiBold" Foreground="#ffffff" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="LblDeskName" Text="" FontSize="20" FontWeight="SemiBold" Foreground="#ffffff" HorizontalAlignment="Center"/>
                 
                 <TextBlock x:Name="LblStatus" 
                            Text="BU BİLGİSAYAR KİLİTLİDİR" 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -13,8 +14,6 @@ namespace GameZoneServer
     class Program
     {
         private static int port = 8888;
-
-        // MÜHENDİSLİK ADIMI: Aktif bağlantıları tutan güvenli havuz (Registry)
         public static ConcurrentDictionary<string, TcpClient> ActiveClients { get; } = new ConcurrentDictionary<string, TcpClient>();
 
         [STAThread]
@@ -35,7 +34,7 @@ namespace GameZoneServer
             {
                 TcpListener server = new TcpListener(IPAddress.Any, port);
                 server.Start();
-                Console.WriteLine($"[SUNUCU] Arka planda TCP dinlemesi başlatıldı. Port: {port}");
+                Console.WriteLine($"[SUNUCU] TCP dinlemesi başlatıldı. Port: {port}");
 
                 while (true)
                 {
@@ -45,46 +44,49 @@ namespace GameZoneServer
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[AĞ HATASI] Dinleme motoru başlatılamadı: {ex.Message}");
+                Console.WriteLine($"[AĞ HATASI] Dinleme motoru hatası: {ex.Message}");
             }
         }
 
         private static async Task HandleClientAsync(TcpClient client)
         {
             NetworkStream stream = client.GetStream();
-            byte[] buffer = new byte[1024];
             string? currentDeskName = null;
 
             try
             {
-                int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                if (bytesRead > 0)
+                using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
                 {
-                    string message = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-
-                    if (message.StartsWith("GIRIS:"))
+                    while (true)
                     {
-                        currentDeskName = message.Split(':')[1];
-                        Console.WriteLine($"[BAĞLANTI] {currentDeskName} yerel ağdan bağlandı!");
+                        string? message = await reader.ReadLineAsync();
+                        if (message == null) break;
 
-                        // Bağlantıyı havuza ekle (Eğer zaten varsa güncelle)
-                        ActiveClients.AddOrUpdate(currentDeskName, client, (key, oldClient) => client);
+                        message = message.Trim();
 
-                        // Eğer arayüz zaten açıksa anlık olarak yeşile boya
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        if (message.StartsWith("GIRIS:"))
                         {
-                            if (App.CurrentMainWindow is Views.MainWindow mainWin)
-                            {
-                                mainWin.ActivateDeskOnUI(currentDeskName, client);
-                            }
-                        });
-                    }
-                }
+                            currentDeskName = message.Split(':')[1];
+                            Console.WriteLine($"[BAĞLANTI] {currentDeskName} bağlandı.");
+                            ActiveClients.AddOrUpdate(currentDeskName, client, (key, oldClient) => client);
 
-                while (true)
-                {
-                    if (stream.ReadByte() == -1) break;
-                    await Task.Delay(1000);
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                if (App.CurrentMainWindow is Views.MainWindow mainWin)
+                                    mainWin.ActivateDeskOnUI(currentDeskName, client);
+                            });
+                        }
+                        // OYUNCU MASASININ SÜRESİ BİTTİĞİNDE BURASI TETİKLENİR
+                        else if (message == "SURE_BITTI")
+                        {
+                            Console.WriteLine($"[OTOMASYON] {currentDeskName} süresi dolduğu için kilitlendi.");
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                if (App.CurrentMainWindow is Views.MainWindow mainWin)
+                                    mainWin.DeactivateDeskOnUI(currentDeskName!);
+                            });
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -93,13 +95,10 @@ namespace GameZoneServer
                 if (!string.IsNullOrEmpty(currentDeskName))
                 {
                     ActiveClients.TryRemove(currentDeskName, out _);
-                    // Arayüz açıksa kartı tekrar griye döndür
                     Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
                         if (App.CurrentMainWindow is Views.MainWindow mainWin)
-                        {
                             mainWin.DeactivateDeskOnUI(currentDeskName);
-                        }
                     });
                 }
             }

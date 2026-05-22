@@ -1,0 +1,22 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GameZoneServer.Views.DurationWindow"
+        Title="Süre Tanımla" Width="300" Height="180"
+        WindowStartupLocation="CenterOwner"
+        Background="#1e1e1e" CornerRadius="10">
+    
+    <Border Padding="20">
+        <StackPanel Spacing="15" VerticalAlignment="Center">
+            <TextBlock x:Name="LblTitle" Text="Masa İçin Süre Girin (Dakika)" 
+                       Foreground="White" FontSize="14" HorizontalAlignment="Center"/>
+            
+            <TextBox x:Name="TxtMinutes" Watermark="Örn: 60" 
+                     Background="#2d2d2d" Foreground="White" BorderBrush="#00ff88"
+                     HorizontalContentAlignment="Center" FontSize="16"/>
+            
+            <Button x:Name="BtnConfirm" Content="Süreyi Başlat" 
+                    Background="#00ff88" Foreground="#1e1e1e" FontWeight="Bold"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Cursor="Hand"/>
+        </StackPanel>
+    </Border>
+</Window>

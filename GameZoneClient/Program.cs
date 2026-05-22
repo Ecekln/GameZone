@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,16 +13,19 @@ namespace GameZoneClient
     {
         private static string serverIp = "127.0.0.1";
         private static int port = 8888;
-        private static string deskName = "Masa-01";
-        public static LockWindow? lockWindow = null!; // Uyarıyı susturan ve dışa açan güncel tanım
+        public static string DeskName { get; private set; } = "Masa-01";
+        public static LockWindow? lockWindow = null!;
 
         [STAThread]
         public static void Main(string[] args)
         {
-            // Arka planda sunucuyla soket bağlantısını canlı tutan motoru başlatıyoruz
-            Task.Run(() => ConnectToServerAsync());
+            // Eğer terminalden "dotnet run -- Masa-02" gibi argüman verilirse masanın adı dinamik değişir
+            if (args.Length > 0)
+            {
+                DeskName = args[0];
+            }
 
-            // Ön planda aşılmaz kilit perdemizi tam ekran açıyoruz
+            Task.Run(() => ConnectToServerAsync());
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 
@@ -36,39 +40,61 @@ namespace GameZoneClient
             {
                 using (TcpClient client = new TcpClient())
                 {
-                    // Sunucu kapılarına dayan
                     await client.ConnectAsync(serverIp, port);
 
                     using (NetworkStream stream = client.GetStream())
                     {
-                        // Ben Masa-01, bağlandım! de
-                        string loginMessage = $"GIRIS:{deskName}\n";
+                        // Dinamik masa ismini sunucuya gönderiyoruz
+                        string loginMessage = $"GIRIS:{DeskName}\n";
                         byte[] data = Encoding.UTF8.GetBytes(loginMessage);
                         await stream.WriteAsync(data, 0, data.Length);
+                        await stream.FlushAsync();
 
-                        byte[] buffer = new byte[1024];
-                        // GameZoneClient/Program.cs içindeki while döngüsünün içini güncelle:
-                        while (true)
+                        using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
                         {
-                            int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                            if (bytesRead == 0) break;
-
-                            string response = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-
-                            if (response == "KILIDI_AC")
+                            while (true)
                             {
-                                // UI Thread'e sızıp kilit ekranını gizliyoruz! Windows serbest kalıyor!
-                                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                string? response = await reader.ReadLineAsync();
+                                if (response == null) break;
+
+                                response = response.Trim();
+
+                                if (response.StartsWith("KILIDI_AC:"))
                                 {
-                                    Program.lockWindow?.HideWindowForPlayer();
-                                });
-                            }
-                            else if (response == "SURE_BITTI")
-                            {
-                                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                                {
-                                    Program.lockWindow?.ShowWindowForPlayer();
-                                });
+                                    int minutes = int.Parse(response.Split(':')[1]);
+                                    Console.WriteLine($"[İSTEMCİ] {minutes} dakikalık süre alındı, masaüstü serbest!");
+
+                                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                    {
+                                        // Sayacı (Widget) oluşturuyoruz
+                                        TimerWidget widget = new TimerWidget(minutes, async () =>
+                                        {
+                                            // SÜRE BİTTİĞİNDE ÇALIŞACAK BLOK:
+                                            Console.WriteLine("[İSTEMCİ] Süre doldu! Kilit ekranı yeniden esir alıyor.");
+                                            Program.lockWindow?.ShowWindowForPlayer();
+
+                                            // Sunucuya sürenin bittiğini bildiriyoruz ki kartı griye döndürsün
+                                            try
+                                            {
+                                                byte[] timeoutData = Encoding.UTF8.GetBytes("SURE_BITTI\n");
+                                                await stream.WriteAsync(timeoutData, 0, timeoutData.Length);
+                                                await stream.FlushAsync();
+                                            }
+                                            catch
+                                            {
+                                                Console.WriteLine("[AĞ HATASI] Süre bitti bildirimi sunucuya iletilemedi.");
+                                            }
+                                        });
+
+                                        // 1. Ana kilit perdesini gizle
+                                        Program.lockWindow?.HideWindowForPlayer();
+
+                                        // 2. Sayacı şimdi fırlat ve odağı (focus) almasını zorla!
+                                        widget.Show();
+                                        widget.Activate(); // Arkaya kaçmasını engeller, öne yapıştırır
+                                        widget.Focus();    // Klavye/Fare odağını üzerine çeker
+                                    });
+                                }
                             }
                         }
                     }
@@ -93,9 +119,11 @@ namespace GameZoneClient
         {
             if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
             {
-                // BAŞINA PROGRAM. EKLEYEREK DERLEYİCİYE YOLUNU GÖSTERİYORUZ
                 Program.lockWindow = new LockWindow();
                 desktop.MainWindow = Program.lockWindow;
+
+                // Başlık çubuğunda hangi masa olduğunu gösterir
+                Program.lockWindow.Title = $"Kilit Ekranı - {Program.DeskName}";
             }
             base.OnFrameworkInitializationCompleted();
         }
