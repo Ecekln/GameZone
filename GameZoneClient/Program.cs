@@ -1,32 +1,38 @@
-﻿using System;
+﻿using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using System;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls;
-using GameZoneClient.Views;
 
 namespace GameZoneClient
 {
-    class Program
+    internal class Program
     {
-        private static string serverIp = "127.0.0.1";
-        private static int port = 8888;
-        public static string DeskName { get; private set; } = "Masa-01";
-        public static LockWindow? lockWindow = null!;
+        public static TcpClient? MainClient;
+        public static NetworkStream? ServerStream;
+        private static string _deskName = "Masa-01";
 
         [STAThread]
         public static void Main(string[] args)
         {
-            // Eğer terminalden "dotnet run -- Masa-02" gibi argüman verilirse masanın adı dinamik değişir
-            if (args.Length > 0)
+            if (args != null && args.Length > 0)
             {
-                DeskName = args[0];
+                string fullArgs = string.Join(" ", args).Replace("--", "").Trim();
+                if (!string.IsNullOrWhiteSpace(fullArgs))
+                {
+                    _deskName = fullArgs.Split(' ').Last().Trim();
+                }
             }
 
+            Console.WriteLine($"🛰️ GameZone İstemcisi Başlatılıyor: [{_deskName}]");
+
             Task.Run(() => ConnectToServerAsync());
-            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args ?? Array.Empty<string>());
         }
 
         public static AppBuilder BuildAvaloniaApp()
@@ -36,96 +42,106 @@ namespace GameZoneClient
 
         private static async Task ConnectToServerAsync()
         {
-            try
+            while (true)
             {
-                using (TcpClient client = new TcpClient())
+                try
                 {
-                    await client.ConnectAsync(serverIp, port);
+                    if (MainClient != null) { try { MainClient.Close(); } catch { } }
 
-                    using (NetworkStream stream = client.GetStream())
+                    MainClient = new TcpClient("127.0.0.1", 5000);
+                    ServerStream = MainClient.GetStream();
+
+                    string registerMsg = $"KAYIT:{_deskName}\n";
+                    byte[] registerData = Encoding.UTF8.GetBytes(registerMsg);
+                    await ServerStream.WriteAsync(registerData, 0, registerData.Length);
+                    await ServerStream.FlushAsync();
+
+                    var reader = new StreamReader(ServerStream, Encoding.UTF8);
+                    string? line;
+
+                    while ((line = await reader.ReadLineAsync()) != null)
                     {
-                        // Dinamik masa ismini sunucuya gönderiyoruz
-                        string loginMessage = $"GIRIS:{DeskName}\n";
-                        byte[] data = Encoding.UTF8.GetBytes(loginMessage);
-                        await stream.WriteAsync(data, 0, data.Length);
-                        await stream.FlushAsync();
-
-                        using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+                        // 🎯 1. DURUM: OTURUM KAPATILDI
+                        if (line == "KILIDI_AC:0" || line.StartsWith("KILIT_LE"))
                         {
-                            while (true)
+                            Dispatcher.UIThread.Post(() =>
                             {
-                                string? response = await reader.ReadLineAsync();
-                                if (response == null) break;
-
-                                response = response.Trim();
-
-                                if (response.StartsWith("KILIDI_AC:"))
+                                if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
                                 {
-                                    int minutes = int.Parse(response.Split(':')[1]);
-                                    Console.WriteLine($"[İSTEMCİ] {minutes} dakikalık süre alındı, masaüstü serbest!");
-
-                                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                    var activeWindows = desktop.Windows.ToList();
+                                    foreach (var win in activeWindows)
                                     {
-                                        // Sayacı (Widget) oluşturuyoruz
-                                        TimerWidget widget = new TimerWidget(minutes, async () =>
+                                        if (win.GetType().Name.Contains("Widget"))
                                         {
-                                            // SÜRE BİTTİĞİNDE ÇALIŞACAK BLOK:
-                                            Console.WriteLine("[İSTEMCİ] Süre doldu! Kilit ekranı yeniden esir alıyor.");
-                                            Program.lockWindow?.ShowWindowForPlayer();
+                                            win.Close();
+                                        }
+                                    }
 
-                                            // Sunucuya sürenin bittiğini bildiriyoruz ki kartı griye döndürsün
-                                            try
-                                            {
-                                                byte[] timeoutData = Encoding.UTF8.GetBytes("SURE_BITTI\n");
-                                                await stream.WriteAsync(timeoutData, 0, timeoutData.Length);
-                                                await stream.FlushAsync();
-                                            }
-                                            catch
-                                            {
-                                                Console.WriteLine("[AĞ HATASI] Süre bitti bildirimi sunucuya iletilemedi.");
-                                            }
-                                        });
-
-                                        // 1. Ana kilit perdesini gizle
-                                        Program.lockWindow?.HideWindowForPlayer();
-
-                                        // 2. Sayacı şimdi fırlat ve odağı (focus) almasını zorla!
-                                        widget.Show();
-                                        widget.Activate(); // Arkaya kaçmasını engeller, öne yapıştırır
-                                        widget.Focus();    // Klavye/Fare odağını üzerine çeker
-                                    });
+                                    if (App.PlayerLockWindow != null)
+                                    {
+                                        App.PlayerLockWindow.ShowWindowForPlayer();
+                                    }
                                 }
+                            });
+                        }
+                        // 🎯 2. DURUM: SÜRE AÇILDI (HEM PERSONEL HEM BAKİYE BURAYI TETİKLER!)
+                        else if (line.StartsWith("KILIDI_AC:"))
+                        {
+                            string[] parts = line.Split(':');
+                            if (parts.Length > 1 && int.TryParse(parts[1], out int minutes) && minutes > 0)
+                            {
+                                Dispatcher.UIThread.Post(() =>
+                                {
+                                    if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                                    {
+                                        if (App.PlayerLockWindow != null)
+                                        {
+                                            App.PlayerLockWindow.HideWindowForPlayer();
+                                        }
+
+                                        var activeWindows = desktop.Windows.ToList();
+                                        var existingWidget = activeWindows.FirstOrDefault(w => w.GetType().Name.Contains("Widget"));
+
+                                        if (existingWidget == null)
+                                        {
+                                            // Projedeki orijinal TimeWidget tipini buluyoruz
+                                            var widgetType = AppDomain.CurrentDomain.GetAssemblies()
+                                                .SelectMany(t => t.GetTypes())
+                                                .FirstOrDefault(t => t.Name == "TimeWidget" || t.FullName!.EndsWith(".TimeWidget"));
+
+                                            if (widgetType != null)
+                                            {
+                                                Window? timeWidgetInstance = null;
+                                                try { timeWidgetInstance = Activator.CreateInstance(widgetType, minutes) as Window; }
+                                                catch
+                                                {
+                                                    try { timeWidgetInstance = Activator.CreateInstance(widgetType, minutes.ToString()) as Window; }
+                                                    catch { timeWidgetInstance = Activator.CreateInstance(widgetType) as Window; }
+                                                }
+
+                                                if (timeWidgetInstance != null)
+                                                {
+                                                    // 🚀 KESİN ÇÖZÜM: Bağımsız ana soket thread'i üzerinden sol üst köşeye zımbalıyoruz!
+                                                    timeWidgetInstance.WindowStartupLocation = WindowStartupLocation.Manual;
+                                                    timeWidgetInstance.Position = new PixelPoint(20, 20); // Sol üst 20px boşluk
+                                                    timeWidgetInstance.Topmost = true; // Her şeyin önünde parlasın
+
+                                                    timeWidgetInstance.Show();
+                                                    timeWidgetInstance.Activate();
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
                             }
                         }
                     }
                 }
+                catch
+                {
+                    await Task.Delay(2000);
+                }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[BAĞLANTI HATASI] Sunucuya ulaşılamıyor: {ex.Message}");
-            }
-        }
-    }
-
-    public class App : Application
-    {
-        public override void Initialize()
-        {
-            Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
-            base.Initialize();
-        }
-
-        public override void OnFrameworkInitializationCompleted()
-        {
-            if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
-            {
-                Program.lockWindow = new LockWindow();
-                desktop.MainWindow = Program.lockWindow;
-
-                // Başlık çubuğunda hangi masa olduğunu gösterir
-                Program.lockWindow.Title = $"Kilit Ekranı - {Program.DeskName}";
-            }
-            base.OnFrameworkInitializationCompleted();
         }
     }
 }

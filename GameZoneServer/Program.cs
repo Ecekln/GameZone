@@ -1,25 +1,24 @@
-﻿using System;
+﻿using Avalonia;
+using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls;
-using GameZoneServer.Views;
 
 namespace GameZoneServer
 {
-    class Program
+    internal class Program
     {
-        private static int port = 8888;
-        public static ConcurrentDictionary<string, TcpClient> ActiveClients { get; } = new ConcurrentDictionary<string, TcpClient>();
+        public static ConcurrentDictionary<string, TcpClient> ActiveClients = new ConcurrentDictionary<string, TcpClient>();
+        public static ConcurrentDictionary<string, DateTime> DeskStartTime = new ConcurrentDictionary<string, DateTime>();
+        public static ConcurrentDictionary<string, int> DeskAllocatedMinutes = new ConcurrentDictionary<string, int>();
 
         [STAThread]
         public static void Main(string[] args)
         {
-            Task.Run(() => StartNetworkListenerAsync());
+            Task.Run(() => StartTcpServerAsync());
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 
@@ -28,105 +27,98 @@ namespace GameZoneServer
                 .UsePlatformDetect()
                 .LogToTrace();
 
-        private static async Task StartNetworkListenerAsync()
+        private static async Task StartTcpServerAsync()
         {
             try
             {
-                TcpListener server = new TcpListener(IPAddress.Any, port);
-                server.Start();
-                Console.WriteLine($"[SUNUCU] TCP dinlemesi başlatıldı. Port: {port}");
+                TcpListener listener = new TcpListener(IPAddress.Any, 5000);
+                listener.Start();
+                Console.WriteLine("🌐 GameZone TCP Sunucusu 5000 portunda dinlemede...");
 
                 while (true)
                 {
-                    TcpClient client = await server.AcceptTcpClientAsync();
+                    TcpClient client = await listener.AcceptTcpClientAsync();
                     _ = Task.Run(() => HandleClientAsync(client));
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[AĞ HATASI] Dinleme motoru hatası: {ex.Message}");
+                Console.WriteLine($"Soket Dinleme Hatası: {ex.Message}");
             }
         }
 
         private static async Task HandleClientAsync(TcpClient client)
         {
-            NetworkStream stream = client.GetStream();
-            string? currentDeskName = null;
+            string? registeredDeskName = null;
+            var stream = client.GetStream();
+            var reader = new StreamReader(stream, Encoding.UTF8);
 
             try
             {
-                using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+                string? line;
+                while ((line = await reader.ReadLineAsync()) != null)
                 {
-                    while (true)
+                    if (line.StartsWith("KAYIT:"))
                     {
-                        string? message = await reader.ReadLineAsync();
-                        if (message == null) break;
+                        registeredDeskName = line.Split(':')[1];
+                        ActiveClients[registeredDeskName] = client;
 
-                        message = message.Trim();
-
-                        if (message.StartsWith("GIRIS:"))
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                         {
-                            currentDeskName = message.Split(':')[1];
-                            Console.WriteLine($"[BAĞLANTI] {currentDeskName} bağlandı.");
-                            ActiveClients.AddOrUpdate(currentDeskName, client, (key, oldClient) => client);
+                            GameZoneServer.Views.MainWindow.ActivateDeskOnUIFromSocket(registeredDeskName, client);
+                        });
+                    }
+                    else if (line.StartsWith("SURE_BITTI:"))
+                    {
+                        string desk = line.Split(':')[1];
+                        DeskStartTime.TryRemove(desk, out _);
+                        DeskAllocatedMinutes.TryRemove(desk, out _);
 
-                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                            {
-                                if (App.CurrentMainWindow is Views.MainWindow mainWin)
-                                    mainWin.ActivateDeskOnUI(currentDeskName, client);
-                            });
-                        }
-                        // OYUNCU MASASININ SÜRESİ BİTTİĞİNDE BURASI TETİKLENİR
-                        else if (message == "SURE_BITTI")
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                         {
-                            Console.WriteLine($"[OTOMASYON] {currentDeskName} süresi dolduğu için kilitlendi.");
-                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            GameZoneServer.Views.MainWindow.DeactivateDeskOnUIFromSocket(desk);
+                        });
+                    }
+                    // 🎯 KİLİT NOKTA: Mesaj geldiğinde masayı hem ağda aktif ediyoruz hem de yeşile boyuyoruz!
+                    else if (line.StartsWith("BAKIYE_ILE_AC:"))
+                    {
+                        string[] parts = line.Split(':');
+                        if (parts.Length > 2)
+                        {
+                            string incomingDeskName = parts[1];
+                            if (int.TryParse(parts[2], out int minutes))
                             {
-                                if (App.CurrentMainWindow is Views.MainWindow mainWin)
-                                    mainWin.DeactivateDeskOnUI(currentDeskName!);
-                            });
+                                // Masayı sunucuya sahte bir soket kaydıyla bile olsa "Bağlı" olarak ekliyoruz
+                                ActiveClients[incomingDeskName] = client;
+
+                                // Süre süreçlerini başlatıyoruz
+                                DeskStartTime[incomingDeskName] = DateTime.Now;
+                                DeskAllocatedMinutes[incomingDeskName] = minutes;
+
+                                // Arayüzü tetikleyip rengi yeşile döndürüyoruz
+                                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                {
+                                    GameZoneServer.Views.MainWindow.ActivateDeskOnUIFromSocket(incomingDeskName, client);
+                                });
+                            }
                         }
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"[KOPMA] {currentDeskName} bağlantısı kesildi: {ex.Message}");
-                if (!string.IsNullOrEmpty(currentDeskName))
+                if (!string.IsNullOrEmpty(registeredDeskName))
                 {
-                    ActiveClients.TryRemove(currentDeskName, out _);
+                    ActiveClients.TryRemove(registeredDeskName, out _);
+                    DeskStartTime.TryRemove(registeredDeskName, out _);
+                    DeskAllocatedMinutes.TryRemove(registeredDeskName, out _);
+
                     Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        if (App.CurrentMainWindow is Views.MainWindow mainWin)
-                            mainWin.DeactivateDeskOnUI(currentDeskName);
+                        GameZoneServer.Views.MainWindow.DeactivateDeskOnUIFromSocket(registeredDeskName);
                     });
                 }
             }
-        }
-    }
-
-    public class App : Application
-    {
-        public static Views.MainWindow? CurrentMainWindow { get; private set; }
-
-        public override void Initialize()
-        {
-            Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
-            base.Initialize();
-        }
-
-        public override void OnFrameworkInitializationCompleted()
-        {
-            if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
-            {
-                desktop.MainWindow = new LoginWindow();
-            }
-            base.OnFrameworkInitializationCompleted();
-        }
-
-        public static void SetMainWindow(Views.MainWindow window)
-        {
-            CurrentMainWindow = window;
         }
     }
 }

@@ -1,47 +1,33 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="GameZoneClient.Views.LockWindow"
-        Title="GameZone Client"
-        WindowState="FullScreen" 
-        Topmost="True"
-        Background="#0a0a0a"
-        RequestedThemeVariant="Dark">
+        Title="GameZone - Bilgisayar Kilitli"
+        Width="450" Height="500"
+        WindowStartupLocation="CenterScreen"
+        Background="#121212">
+        <Border BorderBrush="#ff0055" BorderThickness="3" CornerRadius="15" Margin="20">
+		<Grid RowDefinitions="Auto, *, Auto" Margin="20">
+			
+			<StackPanel Grid.Row="0" HorizontalAlignment="Center" Spacing="10">
+				<TextBlock Text="🎮 GAMEZONE" FontSize="28" FontWeight="ExtraBold" Foreground="#ff0055" HorizontalAlignment="Center"/>
+				<TextBlock Name="LblLockStatus" Text="Kilitli Ekran - Oturum Açın" FontSize="14" Foreground="#888888" HorizontalAlignment="Center"/>
+			</StackPanel>
 
-    <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
-        <Border Background="#111111" 
-                BorderBrush="#ff3333" 
-                BorderThickness="3" 
-                CornerRadius="15" 
-                Padding="40" 
-                Width="500">
-            
-            <StackPanel Spacing="25" HorizontalAlignment="Center">
-                
-                <TextBlock Text="🔒" FontSize="64" HorizontalAlignment="Center"/>
-                <TextBlock Text="GAMEZONE" FontSize="36" FontWeight="Bold" Foreground="#ff3333" HorizontalAlignment="Center"/>
-                
-                <Separator Background="#333333" Height="2"/>
+			<StackPanel Grid.Row="1" VerticalAlignment="Center" Spacing="20">
+				<Border Background="#1e1e1e" CornerRadius="10" Padding="15">
+					<TextBlock Text="Aşağıdaki alandan bakiye yükleyerek sürenizi anında başlatabilirsiniz." 
+							   Foreground="#aaaaaa" FontSize="12" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+				</Border>
 
-                <TextBlock x:Name="LblDeskName" Text="" FontSize="20" FontWeight="SemiBold" Foreground="#ffffff" HorizontalAlignment="Center"/>
-                
-                <TextBlock x:Name="LblStatus" 
-                           Text="BU BİLGİSAYAR KİLİTLİDİR" 
-                           FontSize="16" 
-                           Foreground="#aaaaaa" 
-                           HorizontalAlignment="Center"/>
+				<StackPanel Spacing="10">
+					<TextBlock Text="Yüklenecek Tutar (TL):" Foreground="#ffffff" FontSize="13" FontWeight="Bold"/>
+					<TextBox Name="TxtDepositAmount" Watermark="Örn: 50" FontSize="16" Background="#2d2d2d" Foreground="White" Height="40"/>
+				</StackPanel>
 
-                <TextBlock Text="Oturum açmak için lütfen resepsiyona müracaat ediniz." 
-                           FontSize="12" 
-                           Foreground="#666666" 
-                           TextWrapping="Wrap" 
-                           HorizontalAlignment="Center" 
-                           TextAlignment="Center"/> 
-                
-                <Border Background="#1a1a1a" Padding="10" CornerRadius="5">
-                    <TextBlock x:Name="LblBalance" Text="💰 Güncel Bakiyeniz: 0.00 TL" FontSize="14" Foreground="#00ff88" HorizontalAlignment="Center"/>
-                </Border>
+				<Button Name="BtnDepositBalance" Content="💳 Kredi Kartı ile Bakiye Yükle" Background="#ff0055" Foreground="White" FontWeight="Bold" FontSize="14" Height="45" CornerRadius="8" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+			</StackPanel>
 
-            </StackPanel>
-        </Border>
-    </Grid>
+			<TextBlock Grid.Row="2" Text="GameZone Otomasyon Sistemi v1.0" FontSize="10" Foreground="#444444" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+		</Grid>
+	</Border>
 </Window>
