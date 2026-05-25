@@ -65,7 +65,6 @@ namespace GameZoneClient
                         if (string.IsNullOrWhiteSpace(line)) continue;
 
                         // 🎯 1. DURUM: OTURUM KAPATILDI / SÜRE BİTTİ (KİLİTLE)
-                        // 🎯 1. DURUM: OTURUM KAPATILDI / SÜRE BİTTİ (KİLİTLE)
                         if (line == "KILIDI_AC:0" || line.StartsWith("KILIT_LE"))
                         {
                             Dispatcher.UIThread.Post(() =>
@@ -145,6 +144,20 @@ namespace GameZoneClient
                                         }
                                     }
                                 });
+                            }
+                        }
+                        // 🚀 ADIM 3: CANLI FIYAT GÜNCELLEME DUYURUSU YAKALAYICI
+                        // Sunucu 'Fiyatı Güncelle ve Dağıt' butonuna bastığında bu blok tetiklenir.
+                        else if (line.StartsWith("GUNCEL_FIYAT:"))
+                        {
+                            string[] parts = line.Split(':');
+                            if (parts.Length > 1 && int.TryParse(parts[1], out int newRate))
+                            {
+                                // Kilit ekranındaki (LockWindow) iç fiyat çarpanını dinamik olarak revize eder.
+                                if (GameZoneClient.Views.LockWindow.Instance != null)
+                                {
+                                    GameZoneClient.Views.LockWindow.Instance.UpdateHourlyRate(newRate);
+                                }
                             }
                         }
                     }

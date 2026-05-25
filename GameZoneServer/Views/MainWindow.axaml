@@ -19,22 +19,63 @@
                 <Button x:Name="BtnSettings" Content="⚙️ Sistem Ayarları" Background="Transparent" Foreground="#ffffff" HorizontalAlignment="Stretch" Padding="10"/>
 
                 <Button Name="BtnLogout" 
-                Content="🚪 Çıkış Yap" 
-                Background="#ff3b30" 
-                Foreground="White" 
-                FontWeight="Bold" 
-                Margin="10,20,10,10" 
-                HorizontalAlignment="Stretch" 
-                HorizontalContentAlignment="Center"/>
+                        Content="🚪 Çıkış Yap" 
+                        Background="#ff3b30" 
+                        Foreground="White" 
+                        FontWeight="Bold" 
+                        Margin="10,20,10,10" 
+                        HorizontalAlignment="Stretch" 
+                        HorizontalContentAlignment="Center"/>
             </StackPanel>
         </Border>
 
-       <Border Grid.Column="1" Padding="20">
-            <Grid>
-                <TextBlock x:Name="LblWelcome" Text="Hoş Geldiniz, Yetki Seviyeniz Yükleniyor..." FontSize="20" FontWeight="Bold" Foreground="#ffffff" VerticalAlignment="Top"/>
+        <Border Grid.Column="1" Padding="20">
+            <Grid RowDefinitions="Auto, *">
+                <TextBlock Grid.Row="0" x:Name="LblWelcome" Text="Hoş Geldiniz, Yetki Seviyeniz Yükleniyor..." FontSize="20" FontWeight="Bold" Foreground="#ffffff" Margin="0,0,0,15"/>
                 
-                <UniformGrid x:Name="DesksGrid" Columns="4" Margin="0,50,0,0" VerticalAlignment="Stretch">
+                <Grid Grid.Row="1" Name="MainContentGrid">
+                    
+                    <UniformGrid x:Name="DesksGrid" Columns="4" VerticalAlignment="Stretch" IsVisible="True">
                     </UniformGrid>
+
+                    <StackPanel x:Name="PanelSettings" Spacing="15" VerticalAlignment="Top" IsVisible="False" HorizontalAlignment="Stretch">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <PathIcon Data="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3-1.57-3-3.5s1.07-3.5 3-3.5 3 1.57 3 3.5-1.07 3.5-3 3.5z" Width="20" Height="20" Foreground="#ffffff"/>
+                            <TextBlock Text="Sistem Ayarları ve Fiyatlandırma" FontSize="18" FontWeight="Bold" Foreground="#ffffff"/>
+                        </StackPanel>
+
+                        <StackPanel Spacing="8" Margin="0,15,0,0">
+                            <TextBlock Text="Masa Saatlik Ücret Ayarı (TL):" FontSize="14" Foreground="#cccccc"/>
+                            
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBox Name="TxtHourlyRate" Text="50" Width="120" Height="32" Background="#1e1e1e" BorderBrush="#333333" Foreground="#ffffff"/>
+                                
+                                <Button Name="BtnSaveRate" 
+                                        Content="Fiyatı Güncelle ve Dağıt" 
+                                        Background="#00ff88" 
+                                        Foreground="#121212" 
+                                        FontWeight="Bold" 
+                                        Padding="15,0" 
+                                        Height="32" 
+                                        VerticalContentAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock Name="LblSettingsStatus" Text="" FontSize="14" FontWeight="SemiBold" Foreground="#00ff88" Margin="0,10,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel x:Name="PanelReports" Spacing="15" VerticalAlignment="Stretch" IsVisible="False" HorizontalAlignment="Stretch">
+                        <Border Background="#1a2a1a" BorderBrush="#00ff88" BorderThickness = "1" CornerRadius = "6" Padding = "15" HorizontalAlignment="Stretch">
+                            <TextBlock Name="TxtTotalCiro" Text="Bugünkü Toplam Kasa Cirosu: 0,00 TL" FontSize = "20" Foreground = "LightGreen" FontWeight = "Bold" />
+                        </Border>
+
+                        <TextBlock Text = "📋 Günlük Oturum ve İşlem Geçmişi:" FontSize = "15" Foreground = "White" FontWeight = "SemiBold" Margin = "0,10,0,0" />
+
+                        <ListBox Name="LogListBox" Background = "#1a1a1a" BorderBrush = "#333333" BorderThickness = "1" VerticalAlignment="Stretch" Height="350" CornerRadius = "6" HorizontalAlignment="Stretch">
+                        </ListBox>
+                    </StackPanel>
+
+                </Grid>
             </Grid>
         </Border>
         

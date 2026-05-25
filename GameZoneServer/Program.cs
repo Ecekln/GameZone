@@ -13,6 +13,11 @@ namespace GameZoneServer
     internal class Program
     {
         public static ConcurrentDictionary<string, TcpClient> ActiveClients { get; } = new ConcurrentDictionary<string, TcpClient>();
+
+        // 🚀 HASILAT SİSTEMİ: Toplam ciroyu ve yapılan tüm işlemlerin log geçmişini tutan dinamik listeler
+        public static double TotalRevenue = 0.0;
+        public static System.Collections.Generic.List<string> RevenueLogs = new System.Collections.Generic.List<string>();
+
         public static ConcurrentDictionary<string, DateTime> DeskStartTime { get; } = new ConcurrentDictionary<string, DateTime>();
         public static ConcurrentDictionary<string, int> DeskAllocatedMinutes { get; } = new ConcurrentDictionary<string, int>();
 
@@ -98,12 +103,16 @@ namespace GameZoneServer
                                 DeskStartTime[deskName] = DateTime.Now;
                                 DeskAllocatedMinutes[deskName] = minutes;
 
+                                // 🚀 ADİL HESAP ÇÖZÜMÜ: İlk açılışta kasaya peşin para ekleme kaldırıldı!
+                                // Para, oturum bittiğinde veya el ile kapatıldığında kullanılan dakika kadar milimetrik hesaplanıp eklenecek.
+                                RevenueLogs.Add($"⏳ [{DateTime.Now:HH:mm}] {deskName} için bakiye talebi alındı: {minutes} Dk. Oturum başladı.");
+
                                 string responseCmd = $"KILIDI_AC:{minutes}\n";
                                 byte[] responseData = Encoding.UTF8.GetBytes(responseCmd);
                                 await stream.WriteAsync(responseData, 0, responseData.Length);
                                 await stream.FlushAsync();
 
-                                Console.WriteLine($"💳 {deskName} oyuncu bakiyesiyle {minutes} dk açıldı.");
+                                Console.WriteLine($"💳 {deskName} bakiye talebiyle {minutes} dk için kilit açma emri gönderildi.");
                                 TetikleUI();
                             }
                         }
@@ -130,9 +139,9 @@ namespace GameZoneServer
 
         private static void TetikleUI()
         {
+            // Hem statik örneğe hem de uygulama pencerelerine doğrudan vuruyoruz
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                // 🚀 ÇÖZÜM: Hem statik örneğe hem de uygulama pencerelerine doğrudan vuruyoruz
                 GameZoneServer.Views.MainWindow.ForceRefreshUI();
             });
         }

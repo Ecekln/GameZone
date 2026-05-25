@@ -38,6 +38,15 @@ namespace GameZoneClient.Views
             // Task.Run kayıt döngüsü tamamen kaldırıldı! Yönetim sadece Program.cs'te.
         }
 
+        // 🚀 ADIM 4: MEVCUT DENGEYİ BOZMAYAN YENİ METOT 
+        // Sunucu fiyatı değiştirdiğinde Program.cs soket üzerinden bu metodu çağırır 
+        // ve yerel bakiye hesaplama çarpanını canlı olarak revize eder.
+        public void UpdateHourlyRate(int newRate)
+        {
+            _serverHourlyRate = newRate;
+            System.Diagnostics.Debug.WriteLine($"💰 Masa saatlik ücreti canlı olarak güncellendi: {_serverHourlyRate} TL");
+        }
+
         public void ShowWindowForPlayer()
         {
             Dispatcher.UIThread.Post(() =>
