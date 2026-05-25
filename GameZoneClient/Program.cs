@@ -14,7 +14,7 @@ namespace GameZoneClient
     {
         public static TcpClient? MainClient;
         public static NetworkStream? ServerStream;
-        private static string _deskName = "Masa-01";
+        public static string _deskName = "Masa-01";
 
         [STAThread]
         public static void Main(string[] args)
@@ -48,7 +48,7 @@ namespace GameZoneClient
                 {
                     if (MainClient != null) { try { MainClient.Close(); } catch { } }
 
-                    MainClient = new TcpClient("127.0.0.1", 5000);
+                    MainClient = new TcpClient("127.0.0.1", 5005);
                     ServerStream = MainClient.GetStream();
 
                     string registerMsg = $"KAYIT:{_deskName}\n";
@@ -61,30 +61,41 @@ namespace GameZoneClient
 
                     while ((line = await reader.ReadLineAsync()) != null)
                     {
-                        // 🎯 1. DURUM: OTURUM KAPATILDI
+                        line = line.Trim();
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+
+                        // 🎯 1. DURUM: OTURUM KAPATILDI / SÜRE BİTTİ (KİLİTLE)
+                        // 🎯 1. DURUM: OTURUM KAPATILDI / SÜRE BİTTİ (KİLİTLE)
                         if (line == "KILIDI_AC:0" || line.StartsWith("KILIT_LE"))
                         {
                             Dispatcher.UIThread.Post(() =>
                             {
                                 if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
                                 {
-                                    var activeWindows = desktop.Windows.ToList();
-                                    foreach (var win in activeWindows)
+                                    // 🚀 KESİN ÇÖZÜM: İsme bakmaksızın, kilit ekranı (LockWindow) HARİÇ 
+                                    // arka planda kalmış tüm açık sayaç, widget ve süre pencerelerini zorla kapatır ve hafızadan siler.
+                                    var openWindows = desktop.Windows.ToList();
+                                    foreach (var win in openWindows)
                                     {
-                                        if (win.GetType().Name.Contains("Widget"))
+                                        if (win != GameZoneClient.Views.LockWindow.Instance)
                                         {
-                                            win.Close();
+                                            try
+                                            {
+                                                win.Close();
+                                            }
+                                            catch { }
                                         }
                                     }
 
-                                    if (App.PlayerLockWindow != null)
+                                    // Kilit ekranını tertemiz bir şekilde oyuncunun önüne getir
+                                    if (GameZoneClient.Views.LockWindow.Instance != null)
                                     {
-                                        App.PlayerLockWindow.ShowWindowForPlayer();
+                                        GameZoneClient.Views.LockWindow.Instance.ShowWindowForPlayer();
                                     }
                                 }
                             });
                         }
-                        // 🎯 2. DURUM: SÜRE AÇILDI (HEM PERSONEL HEM BAKİYE BURAYI TETİKLER!)
+                        // 🎯 2. DURUM: SÜRE AÇILDI
                         else if (line.StartsWith("KILIDI_AC:"))
                         {
                             string[] parts = line.Split(':');
@@ -94,40 +105,41 @@ namespace GameZoneClient
                                 {
                                     if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
                                     {
-                                        if (App.PlayerLockWindow != null)
+                                        if (GameZoneClient.Views.LockWindow.Instance != null)
                                         {
-                                            App.PlayerLockWindow.HideWindowForPlayer();
+                                            GameZoneClient.Views.LockWindow.Instance.HideWindowAndStartTimer(minutes);
                                         }
-
-                                        var activeWindows = desktop.Windows.ToList();
-                                        var existingWidget = activeWindows.FirstOrDefault(w => w.GetType().Name.Contains("Widget"));
-
-                                        if (existingWidget == null)
+                                        else
                                         {
-                                            // Projedeki orijinal TimeWidget tipini buluyoruz
-                                            var widgetType = AppDomain.CurrentDomain.GetAssemblies()
-                                                .SelectMany(t => t.GetTypes())
-                                                .FirstOrDefault(t => t.Name == "TimeWidget" || t.FullName!.EndsWith(".TimeWidget"));
+                                            var activeWindows = desktop.Windows.ToList();
+                                            var existingWidget = activeWindows.FirstOrDefault(w => w.GetType().Name.Contains("Widget"));
 
-                                            if (widgetType != null)
+                                            if (existingWidget == null)
                                             {
-                                                Window? timeWidgetInstance = null;
-                                                try { timeWidgetInstance = Activator.CreateInstance(widgetType, minutes) as Window; }
-                                                catch
-                                                {
-                                                    try { timeWidgetInstance = Activator.CreateInstance(widgetType, minutes.ToString()) as Window; }
-                                                    catch { timeWidgetInstance = Activator.CreateInstance(widgetType) as Window; }
-                                                }
+                                                // 🎯 DOSYA SİSTEMİ UYUMU: "TimerWidget" yerine dosya ağacındaki gerçek adı "TimeWidget" yapıldı.
+                                                var widgetType = AppDomain.CurrentDomain.GetAssemblies()
+                                                    .SelectMany(t => t.GetTypes())
+                                                    .FirstOrDefault(t => t.Name == "TimeWidget" || t.FullName!.EndsWith(".TimeWidget"));
 
-                                                if (timeWidgetInstance != null)
+                                                if (widgetType != null)
                                                 {
-                                                    // 🚀 KESİN ÇÖZÜM: Bağımsız ana soket thread'i üzerinden sol üst köşeye zımbalıyoruz!
-                                                    timeWidgetInstance.WindowStartupLocation = WindowStartupLocation.Manual;
-                                                    timeWidgetInstance.Position = new PixelPoint(20, 20); // Sol üst 20px boşluk
-                                                    timeWidgetInstance.Topmost = true; // Her şeyin önünde parlasın
+                                                    Window? timeWidgetInstance = null;
+                                                    try { timeWidgetInstance = System.Activator.CreateInstance(widgetType, minutes, new Action(() => { GameZoneClient.Views.LockWindow.Instance?.ShowWindowForPlayer(); })) as Window; }
+                                                    catch
+                                                    {
+                                                        try { timeWidgetInstance = System.Activator.CreateInstance(widgetType, minutes) as Window; }
+                                                        catch { timeWidgetInstance = System.Activator.CreateInstance(widgetType) as Window; }
+                                                    }
 
-                                                    timeWidgetInstance.Show();
-                                                    timeWidgetInstance.Activate();
+                                                    if (timeWidgetInstance != null)
+                                                    {
+                                                        timeWidgetInstance.WindowStartupLocation = WindowStartupLocation.Manual;
+                                                        timeWidgetInstance.Position = new PixelPoint(20, 20);
+                                                        timeWidgetInstance.Topmost = true;
+
+                                                        timeWidgetInstance.Show();
+                                                        timeWidgetInstance.Activate();
+                                                    }
                                                 }
                                             }
                                         }

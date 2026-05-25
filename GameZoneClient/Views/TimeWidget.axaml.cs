@@ -8,7 +8,15 @@ namespace GameZoneClient.Views
     {
         private TimeSpan _remainingTime;
         private DispatcherTimer? _timer;
-        private Action _onTimeUp;
+        private Action? _onTimeUp;
+
+        // 🚀 KESİN ÇÖZÜM: Avalonia RuntimeLoader'ın AVLN:0005 hatası vermesini
+        // engellemek ve istemci projesinin derleme kilidini açmak için boş constructor eklendi.
+        public TimerWidget()
+        {
+            InitializeComponent();
+            _remainingTime = TimeSpan.FromMinutes(30); // Varsayılan süre önlemi
+        }
 
         public TimerWidget(int minutes, Action onTimeUp)
         {
@@ -16,7 +24,6 @@ namespace GameZoneClient.Views
             _remainingTime = TimeSpan.FromMinutes(minutes);
             _onTimeUp = onTimeUp;
 
-            // MÜHENDİSLİK DOKUNUŞU: Sayacı ekranın sağ üstü yerine tam ortasında başlatıyoruz
             this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
             _timer = new DispatcherTimer();
@@ -44,7 +51,19 @@ namespace GameZoneClient.Views
 
         private void UpdateText()
         {
-            LblTimer.Text = _remainingTime.ToString(@"hh\:mm\:ss");
+            // 🎯 GÜVENLİK: Eğer XAML tarafında LblTimer yüklenirken gecikirse null referans hatası vermemesi için koruma ekledim.
+            var lbl = this.FindControl<TextBlock>("LblTimer") ?? this.Find<TextBlock>("LblTimer");
+            if (lbl != null)
+            {
+                lbl.Text = _remainingTime.ToString(@"hh\:mm\:ss");
+            }
+        }
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            // Sayaç saymayı durdursun ve hafıza referansı temizlensin
+            _timer?.Stop();
+            _timer = null;
         }
     }
 }

@@ -1,24 +1,34 @@
-﻿using Avalonia;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using Avalonia;
 
 namespace GameZoneServer
 {
     internal class Program
     {
-        public static ConcurrentDictionary<string, TcpClient> ActiveClients = new ConcurrentDictionary<string, TcpClient>();
-        public static ConcurrentDictionary<string, DateTime> DeskStartTime = new ConcurrentDictionary<string, DateTime>();
-        public static ConcurrentDictionary<string, int> DeskAllocatedMinutes = new ConcurrentDictionary<string, int>();
+        public static ConcurrentDictionary<string, TcpClient> ActiveClients { get; } = new ConcurrentDictionary<string, TcpClient>();
+        public static ConcurrentDictionary<string, DateTime> DeskStartTime { get; } = new ConcurrentDictionary<string, DateTime>();
+        public static ConcurrentDictionary<string, int> DeskAllocatedMinutes { get; } = new ConcurrentDictionary<string, int>();
+
+        private static TcpListener? _listener;
 
         [STAThread]
         public static void Main(string[] args)
         {
-            Task.Run(() => StartTcpServerAsync());
+            Console.WriteLine("Core: 🖥️ GameZone Sunucusu Başlatılıyor...");
+
+            _listener = new TcpListener(IPAddress.Any, 5005);
+            _listener.Start();
+            Console.WriteLine("Core: 🛰️ Sunucu 5005 portunda kararlı dinlemede...");
+
+            Task.Run(() => AcceptClientsAsync());
+
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 
@@ -27,98 +37,104 @@ namespace GameZoneServer
                 .UsePlatformDetect()
                 .LogToTrace();
 
-        private static async Task StartTcpServerAsync()
+        private static async Task AcceptClientsAsync()
         {
             try
             {
-                TcpListener listener = new TcpListener(IPAddress.Any, 5000);
-                listener.Start();
-                Console.WriteLine("🌐 GameZone TCP Sunucusu 5000 portunda dinlemede...");
-
                 while (true)
                 {
-                    TcpClient client = await listener.AcceptTcpClientAsync();
+                    TcpClient client = await _listener!.AcceptTcpClientAsync();
                     _ = Task.Run(() => HandleClientAsync(client));
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Soket Dinleme Hatası: {ex.Message}");
+                Console.WriteLine($"Core Hatası: {ex.Message}");
             }
         }
 
         private static async Task HandleClientAsync(TcpClient client)
         {
-            string? registeredDeskName = null;
-            var stream = client.GetStream();
-            var reader = new StreamReader(stream, Encoding.UTF8);
+            string connectedDeskName = "Bilinmeyen Masa";
+            NetworkStream stream = client.GetStream();
+
+            // 🎯 ÇÖZÜM: StreamReader yerine ham byte okuyarak satır sonu (\n) takılmasını kökten çözüyoruz.
+            byte[] buffer = new byte[1024];
 
             try
             {
-                string? line;
-                while ((line = await reader.ReadLineAsync()) != null)
+                while (client.Connected)
                 {
-                    if (line.StartsWith("KAYIT:"))
-                    {
-                        registeredDeskName = line.Split(':')[1];
-                        ActiveClients[registeredDeskName] = client;
+                    int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                    if (bytesRead == 0) break; // Bağlantı koptu
 
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                        {
-                            GameZoneServer.Views.MainWindow.ActivateDeskOnUIFromSocket(registeredDeskName, client);
-                        });
-                    }
-                    else if (line.StartsWith("SURE_BITTI:"))
-                    {
-                        string desk = line.Split(':')[1];
-                        DeskStartTime.TryRemove(desk, out _);
-                        DeskAllocatedMinutes.TryRemove(desk, out _);
+                    string rawMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
+                    if (string.IsNullOrWhiteSpace(rawMessage)) continue;
 
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                        {
-                            GameZoneServer.Views.MainWindow.DeactivateDeskOnUIFromSocket(desk);
-                        });
-                    }
-                    // 🎯 KİLİT NOKTA: Mesaj geldiğinde masayı hem ağda aktif ediyoruz hem de yeşile boyuyoruz!
-                    else if (line.StartsWith("BAKIYE_ILE_AC:"))
+                    // Gelen mesajları tek tek satırlara bölüyoruz (Toplu paket koruması)
+                    string[] lines = rawMessage.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+                    foreach (var line in lines)
                     {
-                        string[] parts = line.Split(':');
-                        if (parts.Length > 2)
+                        string cleanLine = line.Trim();
+                        Console.WriteLine($"📥 [Soket Gelen]: '{cleanLine}'");
+
+                        if (cleanLine.StartsWith("KAYIT:"))
                         {
-                            string incomingDeskName = parts[1];
-                            if (int.TryParse(parts[2], out int minutes))
+                            connectedDeskName = cleanLine.Split(':').Last().Trim();
+
+                            ActiveClients[connectedDeskName] = client;
+                            DeskStartTime[connectedDeskName] = DateTime.Now; // Direkt yeşil yakmak için
+
+                            Console.WriteLine($"✅ {connectedDeskName} başarıyla bağlandı ve AKTİF edildi.");
+                            TetikleUI();
+                        }
+                        else if (cleanLine.StartsWith("BAKIYE_ILE_AC:"))
+                        {
+                            string[] parts = cleanLine.Split(':');
+                            if (parts.Length > 2 && int.TryParse(parts[2], out int minutes))
                             {
-                                // Masayı sunucuya sahte bir soket kaydıyla bile olsa "Bağlı" olarak ekliyoruz
-                                ActiveClients[incomingDeskName] = client;
+                                string deskName = parts[1];
+                                DeskStartTime[deskName] = DateTime.Now;
+                                DeskAllocatedMinutes[deskName] = minutes;
 
-                                // Süre süreçlerini başlatıyoruz
-                                DeskStartTime[incomingDeskName] = DateTime.Now;
-                                DeskAllocatedMinutes[incomingDeskName] = minutes;
+                                string responseCmd = $"KILIDI_AC:{minutes}\n";
+                                byte[] responseData = Encoding.UTF8.GetBytes(responseCmd);
+                                await stream.WriteAsync(responseData, 0, responseData.Length);
+                                await stream.FlushAsync();
 
-                                // Arayüzü tetikleyip rengi yeşile döndürüyoruz
-                                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                                {
-                                    GameZoneServer.Views.MainWindow.ActivateDeskOnUIFromSocket(incomingDeskName, client);
-                                });
+                                Console.WriteLine($"💳 {deskName} oyuncu bakiyesiyle {minutes} dk açıldı.");
+                                TetikleUI();
                             }
                         }
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                if (!string.IsNullOrEmpty(registeredDeskName))
-                {
-                    ActiveClients.TryRemove(registeredDeskName, out _);
-                    DeskStartTime.TryRemove(registeredDeskName, out _);
-                    DeskAllocatedMinutes.TryRemove(registeredDeskName, out _);
-
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    {
-                        GameZoneServer.Views.MainWindow.DeactivateDeskOnUIFromSocket(registeredDeskName);
-                    });
-                }
+                Console.WriteLine($"❌ {connectedDeskName} Soket Hatası: {ex.Message}");
             }
+            finally
+            {
+                if (ActiveClients.ContainsKey(connectedDeskName) && ActiveClients[connectedDeskName] == client)
+                {
+                    ActiveClients.TryRemove(connectedDeskName, out _);
+                    DeskStartTime.TryRemove(connectedDeskName, out _);
+                    DeskAllocatedMinutes.TryRemove(connectedDeskName, out _);
+                    Console.WriteLine($"🔌 {connectedDeskName} bağlantısı güvenli kapatıldı.");
+                }
+                client.Close();
+                TetikleUI();
+            }
+        }
+
+        private static void TetikleUI()
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                // 🚀 ÇÖZÜM: Hem statik örneğe hem de uygulama pencerelerine doğrudan vuruyoruz
+                GameZoneServer.Views.MainWindow.ForceRefreshUI();
+            });
         }
     }
 }

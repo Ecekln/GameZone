@@ -2,7 +2,6 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using System;
-using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text;
 
@@ -10,28 +9,57 @@ namespace GameZoneServer.Views
 {
     public partial class MainWindow : Window
     {
-        private string _userRole;
+        private string _userRole = "Admin";
         private int _hourlyRate = 50;
         private double _totalRevenue = 0.0;
         private static MainWindow? _instance;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+            _instance = this;
+            LoadMockDesks();
+        }
 
         public MainWindow(string userRole)
         {
             InitializeComponent();
             _userRole = userRole;
-            _instance = this;
+            _instance = this; // 🚀 ÇÖZÜM: Aktif olan son pencere örneğini buraya zımbalıyoruz.
 
             BtnDesks.Click += OnDesksButtonClick;
             BtnReports.Click += OnReportsButtonClick;
             BtnSettings.Click += OnSettingsButtonClick;
             BtnLogout.Click += OnLogoutButtonClick;
 
-            if (_userRole == "Staff")
-            {
-                BtnSettings.IsVisible = false;
-            }
+            if (_userRole == "Staff") BtnSettings.IsVisible = false;
 
+            LblWelcome.Text = _userRole == "Admin" ? "👑 Yönetici Paneli -> Canlı Masalar" : "🧑‍💼 Personel Ekranı -> Canlı Masalar";
             LoadMockDesks();
+        }
+
+        public static void ForceRefreshUI()
+        {
+            // 🚀 ÇÖZÜM: Arka plandaki zombi tetiklemeyi statik referans üzerinden doğrudan arayüze işletiyoruz.
+            if (_instance != null)
+            {
+                _instance.LoadMockDesks();
+            }
+            else
+            {
+                // Eğer instance null ise aktif pencerelerden bulup tetikliyoruz (Çift Güvenlik Duvarı)
+                if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                {
+                    foreach (var window in desktop.Windows)
+                    {
+                        if (window is MainWindow mainWin)
+                        {
+                            _instance = mainWin;
+                            mainWin.LoadMockDesks();
+                        }
+                    }
+                }
+            }
         }
 
         private void OnLogoutButtonClick(object? sender, RoutedEventArgs e)
@@ -41,25 +69,8 @@ namespace GameZoneServer.Views
             this.Close();
         }
 
-        public static void ActivateDeskOnUIFromSocket(string deskName, TcpClient client)
-        {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                _instance?.LoadMockDesks();
-            });
-        }
-
-        public static void DeactivateDeskOnUIFromSocket(string deskName)
-        {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                _instance?.LoadMockDesks();
-            });
-        }
-
         private void OnDesksButtonClick(object? sender, RoutedEventArgs e)
         {
-            LblWelcome.Text = _userRole == "Admin" ? "👑 Yönetici Paneli -> Canlı Masalar" : "🧑‍💼 Personel Ekranı -> Canlı Masalar";
             LoadMockDesks();
         }
 
@@ -67,18 +78,8 @@ namespace GameZoneServer.Views
         {
             LblWelcome.Text = "📊 Hasılat Raporları (SQL Server Canlı Verileri)";
             DesksGrid.Children.Clear();
-
-            StackPanel reportPanel = new StackPanel { Spacing = 12, Margin = new Avalonia.Thickness(20), HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left };
-
-            // 🎯 DÜZELTME: Hata veren satır jilet gibi temizlendi ve FontSize doğrudan 20 olarak setlendi
-            reportPanel.Children.Add(new TextBlock
-            {
-                Text = $"Bugünkü Toplam Kasa Cirosu: {_totalRevenue:0.00} TL",
-                FontSize = 20,
-                Foreground = Brushes.LightGreen,
-                FontWeight = FontWeight.Bold
-            });
-
+            StackPanel reportPanel = new StackPanel { Spacing = 12, Margin = new Avalonia.Thickness(20) };
+            reportPanel.Children.Add(new TextBlock { Text = $"Bugünkü Toplam Kasa Cirosu: {_totalRevenue:0.00} TL", FontSize = 20, Foreground = Brushes.LightGreen, FontWeight = FontWeight.Bold });
             DesksGrid.Children.Add(reportPanel);
         }
 
@@ -86,10 +87,18 @@ namespace GameZoneServer.Views
         {
             LblWelcome.Text = "⚙️ Sistem Ayarları ve Fiyatlandırma";
             DesksGrid.Children.Clear();
+            if (_userRole != "Admin") return;
+
+            StackPanel settingsPanel = new StackPanel { Spacing = 15, Margin = new Avalonia.Thickness(20) };
+            settingsPanel.Children.Add(new TextBlock { Text = "Masa Saatlik Ücret Ayarı (TL):", FontSize = 16, Foreground = Brushes.White });
+            TextBox txtHourlyRate = new TextBox { Text = _hourlyRate.ToString(), Width = 150 };
+            settingsPanel.Children.Add(txtHourlyRate);
+            DesksGrid.Children.Add(settingsPanel);
         }
 
         public void LoadMockDesks()
         {
+            if (DesksGrid == null) return;
             DesksGrid.Children.Clear();
 
             for (int i = 1; i <= 4; i++)
@@ -111,8 +120,8 @@ namespace GameZoneServer.Views
                     }
                     else
                     {
-                        deskCard.Background = new SolidColorBrush(Color.Parse("#2d2d2d"));
-                        deskCard.BorderBrush = new SolidColorBrush(Color.Parse("#a0a0a0"));
+                        deskCard.Background = new SolidColorBrush(Color.Parse("#2d2d3a"));
+                        deskCard.BorderBrush = new SolidColorBrush(Color.Parse("#ffaa00"));
                         txtStatus.Text = "🟡 Bağlı / Kilitli (Beklemede)";
                         txtStatus.Foreground = Brushes.Yellow;
                     }
@@ -141,56 +150,11 @@ namespace GameZoneServer.Views
                 {
                     if (Program.DeskStartTime.ContainsKey(deskName))
                     {
-                        Window confirmWin = new Window { Title = "Masa Kontrolü", Width = 320, Height = 150, WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = new SolidColorBrush(Color.Parse("#1e1e1e")), Topmost = true };
-                        StackPanel pnl = new StackPanel { Spacing = 15, Margin = new Avalonia.Thickness(20) };
-                        Button btnStop = new Button { Content = "🛑 Oturumu Bitir ve Kilitle", Background = Brushes.Red, Foreground = Brushes.White, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch };
-                        pnl.Children.Add(btnStop);
-                        confirmWin.Content = pnl;
-
-                        btnStop.Click += async (senderWin, eWin) =>
-                        {
-                            Program.DeskStartTime.TryRemove(deskName, out DateTime startTime);
-                            Program.DeskAllocatedMinutes.TryRemove(deskName, out _);
-
-                            TimeSpan elapsed = DateTime.Now - startTime;
-                            double usedMinutes = elapsed.TotalMinutes;
-                            if (usedMinutes < 1.0) usedMinutes = 1.0;
-
-                            // 🎯 UYARI ÇÖZÜMÜ: _hourlyRate değişkenini burada hesaplamaya dahil ederek warning'i de eritiyoruz
-                            double actualCost = ((double)_hourlyRate / 60.0) * usedMinutes;
-                            _totalRevenue += actualCost;
-
-                            NetworkStream stream = client.GetStream();
-                            byte[] cmd = Encoding.UTF8.GetBytes("KILIDI_AC:0\n");
-                            await stream.WriteAsync(cmd, 0, cmd.Length);
-                            await stream.FlushAsync();
-
-                            confirmWin.Close();
-                            LoadMockDesks();
-                        };
-
-                        await confirmWin.ShowDialog(this);
-                        return;
-                    }
-
-                    DurationWindow durationDialog = new DurationWindow(deskName);
-                    durationDialog.Topmost = true;
-                    durationDialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-
-                    await durationDialog.ShowDialog(this);
-
-                    if (durationDialog.SelectedMinutes > 0)
-                    {
+                        Program.DeskStartTime.TryRemove(deskName, out _);
                         NetworkStream stream = client.GetStream();
-                        string commandText = $"KILIDI_AC:{durationDialog.SelectedMinutes}\n";
-                        byte[] cmd = Encoding.UTF8.GetBytes(commandText);
-
+                        byte[] cmd = Encoding.UTF8.GetBytes("KILIDI_AC:0\n");
                         await stream.WriteAsync(cmd, 0, cmd.Length);
                         await stream.FlushAsync();
-
-                        Program.DeskStartTime[deskName] = DateTime.Now;
-                        Program.DeskAllocatedMinutes[deskName] = durationDialog.SelectedMinutes;
-
                         LoadMockDesks();
                     }
                 }
